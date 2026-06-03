@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Минералогическая Лаборатория</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a2340">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Минералы">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body { background: #0d1117; color: #e0e6ef; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ════════════════════════════════════════
+   SHARED
+════════════════════════════════════════ */
+header {
+  background: linear-gradient(135deg,#1a2340,#0d1117);
+  padding: 12px 24px; border-bottom: 1px solid #1e2d4a;
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+header h1 { font-size: 1.3rem; background: linear-gradient(90deg,#7eb8f7,#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+header p  { font-size: 0.78rem; color: #4a6a8a; }
+
+/* mineral card base */
+.mineral-card {
+  background: #1a2340; border: 2px solid #2a3a5c; border-radius: 10px;
+  cursor: pointer; text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+  transition: all .15s;
+}
+.mineral-card:hover  { border-color: #4a7fa5; background: #1e2d4a; }
+.mineral-card.selected { border-color: #7eb8f7; background: #162a44; box-shadow: 0 0 0 3px rgba(126,184,247,.2); }
+.mineral-card svg { display: block; }
+.mineral-card .name { font-weight: 600; color: #b0c4de; line-height: 1.2; }
+.mineral-card .hard { color: #4a6a8a; }
+
+/* scrollbars */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: #2a3a5c; border-radius: 4px; }
+
+/* exp buttons */
+.exp-btn {
+  padding: 8px 16px; border-radius: 8px; border: 2px solid #2a3a5c;
+  background: #1a2340; color: #8090b0; font-size: 0.85rem;
+  cursor: pointer; font-weight: 600; transition: all .15s;
+}
+.exp-btn.active        { border-color: #f59e0b; background: #2a1f00; color: #fbbf24; }
+.exp-btn.active.strike { border-color: #ef4444; background: #2a0000; color: #f87171; }
+
+/* sliders */
+.slider-group { display: flex; flex-direction: column; gap: 4px; }
+.slider-group label { font-size: 0.78rem; color: #6b7fa3; }
+.slider-group .val   { font-size: 0.85rem; font-weight: 700; color: #e0e6ef; }
+input[type=range] { accent-color: #7eb8f7; cursor: pointer; }
+
+/* run button */
+.run-btn {
+  padding: 10px 24px; border-radius: 8px; border: none;
+  background: linear-gradient(135deg,#1d4ed8,#7c3aed);
+  color: white; font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all .15s;
+}
+.run-btn:hover   { transform: scale(1.04); filter: brightness(1.15); }
+.run-btn:active  { transform: scale(.97); }
+.run-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* canvas zone */
+.canvas-zone { flex: 1; position: relative; overflow: hidden; background: #080c14; min-height: 120px; }
+canvas { width: 100%; height: 100%; display: block; }
+.result-overlay {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(0deg,rgba(8,12,20,.97) 0%,rgba(8,12,20,.72) 75%,transparent 100%);
+  padding: 14px 20px 18px; max-height: 48%; overflow-y: auto; display: none;
+}
+.result-overlay::-webkit-scrollbar { display: none; }
+.result-overlay h3 { font-size: 0.92rem; margin-bottom: 5px; }
+.result-overlay p  { font-size: 0.8rem; color: #7a8fa8; line-height: 1.58; }
+.result-heat   h3  { color: #f59e0b; }
+.result-strike h3  { color: #ef4444; }
+
+/* ════════════════════════════════════════
+   DESKTOP  ≥ 769px
+════════════════════════════════════════ */
+@media (min-width: 769px) {
+  /* hide mobile chrome */
+  .mobile-tabs, .mobile-pages { display: none !important; }
+
+  .desktop-body { display: flex; flex: 1; overflow: hidden; }
+
+  /* left panel */
+  .desktop-left {
+    width: 380px; min-width: 300px;
+    background: #111827; border-right: 1px solid #1e2d4a;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .desktop-left .search-bar { padding: 12px 14px; border-bottom: 1px solid #1e2d4a; }
+  .desktop-left .search-bar input {
+    width: 100%; background: #1a2340; border: 1px solid #2a3a5c;
+    border-radius: 8px; padding: 8px 14px; color: #e0e6ef; font-size: 0.88rem; outline: none;
+  }
+  .desktop-left .search-bar input:focus { border-color: #4a7fa5; }
+  .desktop-minerals-grid {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 10px; padding: 12px 14px; overflow-y: auto; flex: 1;
+  }
+  .desktop-minerals-grid .mineral-card { padding: 10px 6px; gap: 5px; }
+  .desktop-minerals-grid .mineral-card svg  { width: 50px; height: 50px; }
+  .desktop-minerals-grid .mineral-card .name { font-size: 0.7rem; }
+  .desktop-minerals-grid .mineral-card .hard { font-size: 0.62rem; }
+
+  /* right panel */
+  .desktop-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .desktop-info {
+    padding: 18px 26px; background: #111827; border-bottom: 1px solid #1e2d4a;
+    display: flex; gap: 18px; align-items: center; min-height: 116px; flex-shrink: 0;
+  }
+  .desktop-info svg { width: 78px; height: 78px; flex-shrink: 0; }
+  .desktop-info .placeholder { color: #3a4a6a; font-size: 0.95rem; }
+  .desktop-info .minfo h2   { font-size: 1.2rem; color: #7eb8f7; margin-bottom: 4px; }
+  .desktop-info .minfo .props { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
+  .desktop-info .minfo .prop  { background: #1a2340; border-radius: 6px; padding: 2px 9px; font-size: 0.75rem; color: #8090b0; }
+  .desktop-info .minfo p { font-size: 0.8rem; color: #5a7a9a; line-height: 1.5; }
+
+  .desktop-exp {
+    padding: 14px 26px; background: #0d1117; border-bottom: 1px solid #1e2d4a; flex-shrink: 0;
+  }
+  .desktop-exp-title { font-size: 0.78rem; color: #5a7a9a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .desktop-exp-row { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+  .desktop-exp-row .exp-btn-pair { display: flex; gap: 8px; }
+  .desktop-exp-row .slider-group { min-width: 180px; }
+  .desktop-exp-row input[type=range] { width: 100%; }
+}
+
+/* ════════════════════════════════════════
+   MOBILE  ≤ 768px
+════════════════════════════════════════ */
+@media (max-width: 768px) {
+  body { overflow: hidden; }
+  header { padding: 9px 14px; }
+  header h1 { font-size: 1rem; }
+  header p  { font-size: 0.67rem; }
+
+  /* hide desktop chrome */
+  .desktop-body { display: none !important; }
+
+  /* tabs */
+  .mobile-tabs { display: flex; background: #0d1117; border-bottom: 1px solid #1e2d4a; flex-shrink: 0; }
+  .mobile-tab  { flex: 1; padding: 9px 4px; text-align: center; font-size: 0.76rem; color: #4a6a8a; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+  .mobile-tab.active { color: #7eb8f7; border-bottom-color: #7eb8f7; }
+  .mobile-tab .badge { display:inline-block; background:#7eb8f7; color:#0d1117; border-radius:99px; font-size:0.58rem; padding:1px 5px; margin-left:3px; font-weight:700; }
+
+  /* pages */
+  .mobile-pages { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .mobile-page  { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+  .mobile-page.active { display: flex; }
+
+  /* page1 grid */
+  .mob-search { padding: 9px 12px; flex-shrink: 0; }
+  .mob-search input {
+    width: 100%; background: #1a2340; border: 1px solid #2a3a5c;
+    border-radius: 8px; padding: 8px 13px; color: #e0e6ef; font-size: 0.88rem; outline: none;
+  }
+  .mob-minerals-grid {
+    display: grid; grid-template-columns: repeat(4,1fr);
+    gap: 7px; padding: 9px 11px; overflow-y: auto; flex: 1;
+  }
+  .mob-minerals-grid::-webkit-scrollbar { display: none; }
+  .mob-minerals-grid .mineral-card { padding: 7px 3px; gap: 3px; }
+  .mob-minerals-grid .mineral-card svg  { width: 40px; height: 40px; }
+  .mob-minerals-grid .mineral-card .name { font-size: 0.58rem; }
+  .mob-minerals-grid .mineral-card .hard { font-size: 0.52rem; }
+
+  /* page2 info strip */
+  .mob-info {
+    background: #111827; border-bottom: 1px solid #1e2d4a;
+    padding: 9px 13px; display: flex; gap: 11px; align-items: center;
+    flex-shrink: 0; min-height: 70px;
+  }
+  .mob-info svg { width: 48px; height: 48px; flex-shrink: 0; }
+  .mob-info .placeholder { color: #3a4a6a; font-size: 0.82rem; }
+  .mob-info .minfo h2   { font-size: 0.88rem; color: #7eb8f7; margin-bottom: 2px; }
+  .mob-info .minfo .props { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 3px; }
+  .mob-info .minfo .prop  { background: #1a2340; border-radius: 5px; padding: 2px 6px; font-size: 0.6rem; color: #8090b0; }
+  .mob-info .minfo p { font-size: 0.68rem; color: #5a7a9a; line-height: 1.4; }
+
+  /* page2 controls */
+  .mob-exp { padding: 9px 13px; background: #0d1117; border-bottom: 1px solid #1e2d4a; flex-shrink: 0; }
+  .mob-exp-type { display: flex; gap: 8px; margin-bottom: 9px; }
+  .mob-exp-type .exp-btn { flex: 1; padding: 8px 4px; font-size: 0.8rem; }
+  .mob-slider-row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+  .mob-slider-row label { font-size: 0.7rem; color: #5a7a9a; white-space: nowrap; }
+  .mob-slider-row input { flex: 1; height: 20px; }
+  .mob-slider-row .val  { font-size: 0.78rem; font-weight: 700; color: #e0e6ef; min-width: 58px; text-align: right; }
+  .mob-run { width: 100%; padding: 10px; border-radius: 9px; border: none; background: linear-gradient(135deg,#1d4ed8,#7c3aed); color: white; font-size: 0.92rem; font-weight: 700; cursor: pointer; }
+  .mob-run:active { transform: scale(.97); }
+  .mob-run:disabled { opacity: .4; }
+
+  .choose-hint { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:#3a4a6a; text-align:center; padding:20px; }
+  .choose-hint svg { width:44px; height:44px; opacity:.35; }
+  .choose-hint p { font-size:0.82rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚗️ Минералогическая Лаборатория</h1>
+    <p>Выберите минерал и проведите эксперимент</p>
+  </div>
+</header>
+
+<!-- ══════════ DESKTOP ══════════ -->
+<div class="desktop-body">
+  <!-- left -->
+  <div class="desktop-left">
+    <div class="search-bar">
+      <input type="text" id="d-search" placeholder="🔍 Поиск минерала..." oninput="filterMinerals()">
+    </div>
+    <div class="desktop-minerals-grid" id="d-grid"></div>
+  </div>
+
+  <!-- right -->
+  <div class="desktop-right">
+    <div class="desktop-info" id="d-info">
+      <div class="placeholder">← Выберите минерал из списка</div>
+    </div>
+
+    <div class="desktop-exp">
+      <div class="desktop-exp-title">Эксперимент</div>
+      <div class="desktop-exp-row">
+        <div class="exp-btn-pair">
+          <button class="exp-btn active"  id="d-btnHeat"   onclick="selectExp('heat')">🔥 Нагрев</button>
+          <button class="exp-btn"         id="d-btnStrike"  onclick="selectExp('strike')">🔨 Удар</button>
+        </div>
+        <div class="slider-group" id="d-sliderHeat">
+          <label>Температура: <span class="val" id="d-tempVal">500°C</span></label>
+          <input type="range" id="d-tempSlider" min="50" max="3000" value="500"
+                 oninput="document.getElementById('d-tempVal').textContent=this.value+'°C'">
+        </div>
+        <div class="slider-group" id="d-sliderStrike" style="display:none">
+          <label>Сила удара: <span class="val" id="d-forceVal">30 Н·м</span></label>
+          <input type="range" id="d-forceSlider" min="1" max="100" value="30"
+                 oninput="document.getElementById('d-forceVal').textContent=this.value+' Н·м'">
+        </div>
+        <button class="run-btn" id="d-runBtn" onclick="runExperiment('d')" disabled>▶ Провести опыт</button>
+      </div>
+    </div>
+
+    <div class="canvas-zone" id="d-canvasZone">
+      <canvas id="d-canvas"></canvas>
+      <div class="result-overlay" id="d-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MOBILE ══════════ -->
+<div class="mobile-tabs">
+  <div class="mobile-tab active" id="m-tab1" onclick="mobTab(1)">🪨 Минералы<span class="badge" id="m-badge">32</span></div>
+  <div class="mobile-tab"        id="m-tab2" onclick="mobTab(2)">🔬 Опыт</div>
+</div>
+
+<div class="mobile-pages">
+  <!-- page 1 -->
+  <div class="mobile-page active" id="m-page1">
+    <div class="mob-search">
+      <input type="text" id="m-search" placeholder="🔍 Поиск минерала..." oninput="filterMinerals()">
+    </div>
+    <div class="mob-minerals-grid" id="m-grid"></div>
+  </div>
+
+  <!-- page 2 -->
+  <div class="mobile-page" id="m-page2">
+    <div class="mob-info" id="m-info">
+      <div class="placeholder">← Сначала выберите минерал</div>
+    </div>
+
+    <div class="mob-exp">
+      <div class="mob-exp-type">
+        <button class="exp-btn active"  id="m-btnHeat"   onclick="selectExp('heat')">🔥 Нагрев</button>
+        <button class="exp-btn"         id="m-btnStrike"  onclick="selectExp('strike')">🔨 Удар</button>
+      </div>
+      <div id="m-sliderHeat">
+        <div class="mob-slider-row">
+          <label>Темп.</label>
+          <input type="range" id="m-tempSlider" min="50" max="3000" value="500"
+                 oninput="document.getElementById('m-tempVal').textContent=this.value+'°C'">
+          <span class="val" id="m-tempVal">500°C</span>
+        </div>
+      </div>
+      <div id="m-sliderStrike" style="display:none">
+        <div class="mob-slider-row">
+          <label>Сила</label>
+          <input type="range" id="m-forceSlider" min="1" max="100" value="30"
+                 oninput="document.getElementById('m-forceVal').textContent=this.value+' Н·м'">
+          <span class="val" id="m-forceVal">30 Н·м</span>
+        </div>
+      </div>
+      <button class="mob-run" id="m-runBtn" onclick="runExperiment('m')" disabled>▶ Провести опыт</button>
+    </div>
+
+    <div class="canvas-zone" id="m-canvasZone">
+      <canvas id="m-canvas"></canvas>
+      <div class="result-overlay" id="m-result"></div>
+      <div class="choose-hint" id="m-hint">
+        <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="26,6 42,18 38,38 14,38 10,18" fill="#2a3a5c" stroke="#3a4a6a" stroke-width="2"/>
+        </svg>
+        <p>Перейдите на вкладку «Минералы»,<br>выберите образец и вернитесь сюда</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────────────
+const MINERALS = [
+  { id:'quartz',     name:'Кварц',        formula:'SiO₂',             hardness:7,   melt:1650, color:'#e8f4f8', color2:'#b0d8ec', cleavage:'отсутствует',              system:'тригональная',
+    desc:'Один из самых распространённых минералов земной коры. Образует призматические кристаллы.',
+    heatEffects:{200:'Нагрев не вызывает видимых изменений. Кварц стабилен.',573:'При 573°C происходит фазовый переход α→β-кварц с резким изменением объёма — минерал трескается!',870:'Переход в тридимит. Форма кристаллов начинает разрушаться.',1470:'Переход в кристобалит. Структура полностью перестраивается.',1650:'Расплавление! Кварц превращается в вязкую стекловидную массу — кварцевое стекло.'},
+    strikeEffects:{10:'Лёгкий удар — кварц выдерживает без видимых изменений.',40:'Появляются микротрещины с характерным раковистым изломом.',70:'Кварц раскалывается на куски с блестящими раковистыми поверхностями. Острые края!',100:'Разлетается осколками с характерным стеклянным изломом. Раковистые сколы очень острые.'} },
+
+  { id:'pyrite',     name:'Пирит',        formula:'FeS₂',             hardness:6.5, melt:1177, color:'#d4a835', color2:'#8b6914', cleavage:'несовершенная',              system:'кубическая',
+    desc:'«Золото дураков». Кристаллы кубической формы с характерным металлическим блеском.',
+    heatEffects:{200:'Поверхность тускнеет, появляется побежалость.',400:'Начинается разложение: 2FeS₂ → 2FeS + S₂. Выделяется сера — запах серы!',600:'Активное горение серы, синеватое пламя. Образуется магнитный пирротин FeS.',1000:'Полное разложение пирита. Остаток — оксид железа Fe₂O₃.',1177:'Железо плавится. Светящийся металлический расплав.'},
+    strikeEffects:{10:'Металлический звук при ударе. Поверхность не повреждена.',30:'Высекаются яркие искры! Пирит воспламеняет серу — отсюда его название (от греч. pyr — огонь).',60:'Минерал раскалывается по неровным поверхностям. Видна внутренняя золотистая поверхность.',90:'Разрушается в мелкие кусочки. Продолжают сыпаться искры.'} },
+
+  { id:'galena',     name:'Галенит',      formula:'PbS',              hardness:2.5, melt:1114, color:'#8090a0', color2:'#4a5560', cleavage:'совершенная кубическая',      system:'кубическая',
+    desc:'Основная руда свинца. Очень тяжёлый минерал с ярким металлическим блеском.',
+    heatEffects:{200:'Поверхность темнеет. Начинают выделяться пары свинца.',400:'PbS окисляется: PbS + O₂ → PbO + SO₂. Ядовитый диоксид серы!',600:'Образуется жёлтый оксид свинца — массикот PbO.',900:'Масса плавится в тяжёлую серебристую жидкость — свинец.',1114:'Полное расплавление. Жидкий свинец растекается — очень плотный.'},
+    strikeEffects:{10:'Мягкий минерал — легко деформируется, оставляет след на бумаге.',30:'Раскалывается на правильные кубические обломки — совершенная спайность!',60:'Крошится на мелкие кубики. Тяжёлый звук при ударе.',90:'Рассыпается. Видны блестящие плоскости спайности.'} },
+
+  { id:'halite',     name:'Галит (соль)', formula:'NaCl',             hardness:2.5, melt:801,  color:'#f8f0e0', color2:'#d4c4a0', cleavage:'совершенная',                system:'кубическая',
+    desc:'Обычная поваренная соль. Образует кубические кристаллы, растворима в воде.',
+    heatEffects:{200:'Кристаллы начинают трескаться из-за теплового расширения.',400:'Поверхность тускнеет, незначительное испарение.',801:'Минерал плавится в прозрачную жидкость. Температура плавления точно 801°C!',1000:'Жидкий NaCl кипит, выделяя пары — ядовито!',1413:'Кипение — полное испарение соли.'},
+    strikeEffects:{5:'Мягкий: легко царапается ногтем. Удар оставляет вмятину.',20:'Раскалывается на правильные кубики по плоскостям спайности.',50:'Рассыпается на множество маленьких кубиков. Характерный хруст.',80:'Превращается в порошок. Кубическая симметрия заметна даже в мелких обломках.'} },
+
+  { id:'sulfur',     name:'Сера',         formula:'S₈',               hardness:2,   melt:113,  color:'#f5d020', color2:'#c8a000', cleavage:'несовершенная',              system:'ромбическая',
+    desc:'Самородный неметалл. Хрупкая, горит синим пламенем с резким запахом SO₂.',
+    heatEffects:{80:'Сера размягчается, становится пластичной.',113:'Плавится в жёлтую подвижную жидкость!',160:'Жидкость темнеет, становится вязкой из-за полимеризации молекул.',250:'Сера загорается синим пламенем, выделяя SO₂ с резким запахом.',444:'Кипение — сера полностью испаряется в фиолетовый пар.'},
+    strikeEffects:{5:'Сера хрупкая — сразу трескается при малейшем ударе.',15:'Раскалывается с характерным треском. Обломки жёлтые.',40:'Рассыпается в порошок. Статический заряд — порошок прилипает.',70:'Мощный удар — загорается! Синее пламя от трения.'} },
+
+  { id:'malachite',  name:'Малахит',      formula:'Cu₂CO₃(OH)₂',     hardness:3.5, melt:null, color:'#1a9e5c', color2:'#0d5c35', cleavage:'совершенная',                system:'моноклинная',
+    desc:'Ярко-зелёный минерал с характерным полосатым рисунком. Руда меди.',
+    heatEffects:{200:'Начинается разложение. Зелёный цвет темнеет.',300:'Зелёный цвет исчезает — образуется чёрный оксид меди CuO.',400:'Полное разложение. Пористый чёрный остаток.',700:'При восстановительном нагреве CuO → Cu. Появляется красная медь!',1085:'Медь плавится. Блестящий красновато-оранжевый расплав.'},
+    strikeEffects:{10:'Мягкий: царапается монетой. Удар оставляет след.',30:'Раскалывается, обнажая красивый зонально-полосатый рисунок.',60:'Обломки с волнистыми зелёными полосами. Декоративен даже в осколках.',90:'Крошится. Ярко-зелёный порошок остаётся на наковальне.'} },
+
+  { id:'fluorite',   name:'Флюорит',      formula:'CaF₂',             hardness:4,   melt:1418, color:'#a855f7', color2:'#6b21a8', cleavage:'совершенная октаэдрическая', system:'кубическая',
+    desc:'Флюоресцирует в УФ-свете. Разнообразная окраска: фиолетовый, зелёный, жёлтый.',
+    heatEffects:{200:'Термолюминесценция: минерал светится!',400:'Цвет бледнеет — термическое отбеливание.',900:'Начинает разрушаться кристаллическая структура.',1418:'Расплавление в прозрачную жидкость.',2000:'Жидкий флюорит кипит, выделяя фтористый водород HF — крайне опасен!'},
+    strikeEffects:{10:'Твёрдость 4 — царапается стальным ножом.',30:'Раскалывается по идеальным октаэдрическим граням! Красивые грани.',60:'Распадается на октаэдрические осколки — характерная спайность.',90:'Рассыпается. Блестящие грани правильных октаэдров.'} },
+
+  { id:'magnetite',  name:'Магнетит',     formula:'Fe₃O₄',            hardness:5.5, melt:1597, color:'#2a2a3a', color2:'#4a4a5a', cleavage:'отсутствует',              system:'кубическая',
+    desc:'Природный магнит. Притягивает железные предметы, ориентирует компас.',
+    heatEffects:{300:'Магнитные свойства начинают ослабевать.',580:'Точка Кюри: магнетит теряет ферромагнитные свойства! Больше не притягивает железо.',800:'При охлаждении магнетизм восстанавливается.',1200:'Поверхность оплавляется.',1597:'Расплавление. Жидкое железо.'},
+    strikeEffects:{10:'Магнетит притягивает стальной молоток — интересный эффект!',40:'Твёрдый: с трудом раскалывается по неровным поверхностям.',70:'Осколки по-прежнему магнитны! Каждый кусочек — маленький магнит.',100:'Разрушается. Мелкие осколки притягиваются друг к другу.'} },
+
+  { id:'calcite',    name:'Кальцит',      formula:'CaCO₃',            hardness:3,   melt:null, color:'#f0ede0', color2:'#c8c0a0', cleavage:'совершенная ромбоэдрическая',system:'тригональная',
+    desc:'Основа мрамора и известняка. Двойное лучепреломление — раздваивает изображение.',
+    heatEffects:{200:'Кристалл нагревается, видимых изменений нет.',500:'Начинается медленное разложение.',840:'CaCO₃ → CaO + CO₂ — обжиг! Белый пористый оксид кальция (известь).',1000:'Полное разложение. Жжёная известь.',1300:'CaO плавится лишь при очень высокой температуре.'},
+    strikeEffects:{5:'Мягкий: легко царапается монетой.',20:'Раскалывается по трём плоскостям спайности — правильные ромбоэдры!',50:'Обломки ромбоэдрической формы, грани гладкие и блестящие.',80:'Рассыпается на ромбоэдрические осколки разного размера.'} },
+
+  { id:'diamond',    name:'Алмаз',        formula:'C',                hardness:10,  melt:null, color:'#e8f8ff', color2:'#a0d8ef', cleavage:'совершенная',                system:'кубическая',
+    desc:'Самый твёрдый природный минерал. Режет стекло, не царапается ничем кроме алмаза.',
+    heatEffects:{400:'Абсолютно никаких изменений — алмаз стабилен на воздухе.',700:'В чистом кислороде: алмаз начинает гореть! C + O₂ → CO₂.',900:'Активное горение в O₂. Алмаз превращается в CO₂ — исчезает бесследно!',1500:'В вакууме: начинается графитизация поверхности — чёрный графит.',3550:'Точка плавления — самая высокая из всех элементов под давлением.'},
+    strikeEffects:{20:'Алмаз царапает стальную наковальню, не получая повреждений!',50:'Несмотря на твёрдость, алмаз хрупкий! По плоскостям спайности — трещина.',80:'Раскалывается! Алмаз твёрдый, но не вязкий. Грани спайности блестящие.',100:'Осколки с идеальными плоскостями. Каждый — маленький бриллиант.'} },
+
+  { id:'gold',       name:'Золото',       formula:'Au',               hardness:2.5, melt:1064, color:'#ffd700', color2:'#b8860b', cleavage:'отсутствует',              system:'кубическая',
+    desc:'Самородный металл. Самый ковкий из металлов, не ржавеет, химически стоек.',
+    heatEffects:{200:'Золото блестит, поверхность не тускнеет — химически инертно.',500:'Раскалённое золото светится красным. Всё ещё твёрдое.',900:'Золото светится ярко-оранжевым. Очень мягкое.',1064:'Расплавление! Жёлтая светящаяся жидкость — золото плавится точно при 1064°C.',1500:'Жидкое золото течёт, как вода. Золотистое сияние.'},
+    strikeEffects:{5:'Самородное золото очень мягкое — легко деформируется.',20:'Расплющивается в тонкий листочек — ковкость! Не ломается.',50:'Превращается в тонкую фольгу. Золото можно раскатать до толщины 0.0001 мм.',80:'Максимальная деформация: тончайший лист, почти прозрачный — видно свет!'} },
+
+  { id:'silver',     name:'Серебро',      formula:'Ag',               hardness:2.5, melt:961,  color:'#c8d0d8', color2:'#8090a0', cleavage:'отсутствует',              system:'кубическая',
+    desc:'Самородный металл. Лучший проводник электричества и тепла среди металлов.',
+    heatEffects:{200:'Поверхность слегка темнеет — образуется Ag₂S от следов серы.',500:'Серебро раскаляется, сохраняет блеск при отсутствии серы.',961:'Расплавление в блестящую жидкую каплю — точно при 961°C!',1000:'Жидкое серебро на воздухе поглощает кислород — «дыхание» серебра.',1235:'При затвердевании выделяет O₂ — «плевок серебра»!'},
+    strikeEffects:{5:'Очень мягкое — деформируется, как золото.',20:'Расплющивается, вытягивается. Серебро ковкое и пластичное.',50:'Тонкий серебряный лист. Блестит!',80:'Тончайшая фольга. Серебро не ломается — вытягивается в нить.'} },
+
+  { id:'hematite',   name:'Гематит',      formula:'Fe₂O₃',            hardness:6,   melt:1565, color:'#8b2020', color2:'#4a0f0f', cleavage:'отсутствует',              system:'тригональная',
+    desc:'Руда железа. Черта красная как кровь (от греч. haima — кровь). Тяжёлый.',
+    heatEffects:{300:'Поверхность слегка темнеет.',600:'Частичное восстановление до Fe₃O₄ (магнетита). Появляются магнитные свойства!',900:'Восстановление до FeO — вюстит. Цвет становится чёрным.',1200:'Начинается плавление.',1565:'Расплавление в тёмно-красную жидкость. Жидкое железо.'},
+    strikeEffects:{10:'Твёрдый минерал — оставляет царапины на стали!',40:'Раскалывается по неровным поверхностям. Красная черта остаётся на наковальне.',70:'Красноватые осколки с металлическим блеском. Тяжёлые!',100:'Разрушается. Красно-бурый порошок — как охра, использовался как краска.'} },
+
+  { id:'obsidian',   name:'Обсидиан',     formula:'SiO₂+',            hardness:5.5, melt:700,  color:'#1a1a2a', color2:'#3a3a4a', cleavage:'отсутствует',              system:'аморфный',
+    desc:'Вулканическое стекло. Острее хирургического скальпеля — использовался как нож.',
+    heatEffects:{200:'Тепло поглощается медленно — обсидиан плохой проводник тепла.',500:'Поверхность начинает светлеть — «цветение» стекла.',700:'Размягчение! Вулканическое стекло становится пластичным.',900:'Деформируется под собственным весом — стекло течёт.',1000:'Жидкая лава! Обсидиан возвращается в расплавленное состояние.'},
+    strikeEffects:{10:'Острый раковистый скол! Лезвие острее стали.',30:'Раскалывается с характерным раковистым изломом. Края смертельно острые.',60:'Осколки острейшие — использовались первобытными людьми как оружие.',90:'Разлетается острыми осколками. Стекло!'} },
+
+  { id:'talc',       name:'Тальк',        formula:'Mg₃Si₄O₁₀(OH)₂',  hardness:1,   melt:850,  color:'#d4e8d4', color2:'#90b890', cleavage:'совершенная',                system:'моноклинная',
+    desc:'Самый мягкий минерал (эталон 1 по Моосу). Жирный на ощупь, скользкий.',
+    heatEffects:{200:'Выделяется адсорбированная вода. Белеет.',500:'Структурная OH-группа удаляется. Дегидроксилирование.',850:'Разложение: образуется энстатит MgSiO₃ и кристобалит SiO₂.',1000:'Спекание продуктов распада.',1300:'Стеатит — техническая керамика из талька.'},
+    strikeEffects:{1:'Тальк настолько мягкий — царапается ногтем!',5:'Рассыпается в скользкий белый порошок при малейшем ударе.',20:'Полностью превращается в пудру. Тальк IS пудра.',50:'Мелкодисперсный белый порошок. Скользкий на ощупь.'} },
+
+  { id:'gypsum',     name:'Гипс',         formula:'CaSO₄·2H₂O',      hardness:2,   melt:null, color:'#f0ece0', color2:'#c8c4b0', cleavage:'совершенная',                system:'моноклинная',
+    desc:'Мягкий минерал. При нагреве теряет воду и превращается в строительный алабастр.',
+    heatEffects:{107:'Начало обезвоживания: CaSO₄·2H₂O → CaSO₄·0.5H₂O + 1.5H₂O. Алебастр!',200:'Полностью обезвоженный ангидрит CaSO₄. Порошок.',400:'Ангидрит стабилен. Структура кристаллов изменена.',900:'CaSO₄ частично разлагается: CaSO₄ → CaO + SO₃.',1200:'Полное разложение. Жжёный гипс.'},
+    strikeEffects:{5:'Мягчайший: царапается ногтем.',15:'Раскалывается на пластинки — пластинчатая спайность.',35:'Тонкие прозрачные листы — «Марийское стекло» (разновидность гипса).',60:'Рассыпается в белый порошок. Мягкий, как мел.'} },
+
+  { id:'tourmaline', name:'Турмалин',     formula:'NaFe₃Al₆(BO₃)₃',  hardness:7.5, melt:1200, color:'#1a6b3a', color2:'#0d3a20', cleavage:'несовершенная',              system:'тригональная',
+    desc:'Пьезоэлектрик! При нагреве или давлении генерирует электрический заряд.',
+    heatEffects:{200:'Пироэлектрический эффект — при нагреве возникает электрический заряд!',400:'Поверхность покрывается оксидами, цвет тускнеет.',700:'Кристалл начинает терять прозрачность.',1000:'Разрушение структуры, плавление начинается.',1200:'Расплавление в тёмную вязкую массу.'},
+    strikeEffects:{10:'Пьезоэлектрический эффект: при ударе — электрическая искра!',35:'Раскалывается с образованием неровных сколов.',65:'Осколки с характерными штриховками вдоль кристалла.',90:'Разрушается. Тонкие обломки всё ещё пьезоэлектрики.'} },
+
+  { id:'garnet',     name:'Гранат',       formula:'Fe₃Al₂(SiO₄)₃',   hardness:7,   melt:1315, color:'#8b0000', color2:'#4a0000', cleavage:'несовершенная',              system:'кубическая',
+    desc:'Красный камень. Использовался как абразив. Гранат = зерно граната по форме.',
+    heatEffects:{300:'Цвет постепенно тускнеет при нагреве.',600:'Поверхность окисляется, появляются трещины.',900:'Кристаллическая структура начинает разрушаться.',1200:'Декрипитация — трескается с треском из-за внутреннего давления!',1315:'Расплавление в тёмно-красную жидкость.'},
+    strikeEffects:{10:'Очень твёрдый — оставляет царапины на стекле.',40:'С трудом раскалывается по неровным изогнутым поверхностям.',70:'Осколки неправильной формы. Острые края. Используются как абразив.',95:'Разрушается в мелкие зёрна. Природный наждак!'} },
+
+  { id:'topaz',      name:'Топаз',        formula:'Al₂SiO₄(F,OH)₂',  hardness:8,   melt:1600, color:'#87ceeb', color2:'#4a90c0', cleavage:'совершенная базальная',      system:'ромбическая',
+    desc:'Твёрдый драгоценный камень. Эталон твёрдости 8 по шкале Мооса.',
+    heatEffects:{300:'Нагрев не вызывает изменений — топаз стабилен.',600:'Цвет начинает бледнеть — термическое обесцвечивание.',900:'Возможно растрескивание из-за тепловых напряжений.',1200:'Начало разрушения структуры.',1600:'Расплавление в стеклообразную массу.'},
+    strikeEffects:{10:'Очень твёрдый. Оставляет глубокие царапины на кварце.',35:'По совершенной базальной спайности — ровный гладкий скол!',65:'Разламывается на крупные части с блестящей поверхностью спайности.',90:'Осколки с идеальными плоскими поверхностями. Красивые!'} },
+
+  { id:'corundum',   name:'Корунд',       formula:'Al₂O₃',            hardness:9,   melt:2050, color:'#cc2244', color2:'#880020', cleavage:'отсутствует',              system:'тригональная',
+    desc:'Второй по твёрдости после алмаза. Рубин и сапфир — разновидности корунда.',
+    heatEffects:{500:'Корунд абсолютно стабилен. Никаких изменений.',1000:'При высоких T рубин временно бледнеет.',1500:'Поверхность начинает оплавляться.',2000:'Начало плавления.',2050:'Расплавление! Используется для выращивания синтетических рубинов.'},
+    strikeEffects:{15:'Твёрдость 9! Оставляет царапины на всём кроме алмаза.',40:'Хотя нет спайности, при сильном ударе — неровный скол.',70:'Раскалывается. Осколки по-прежнему твёрже стали.',95:'Дробится. Порошок корунда — лучший абразив (наждак).'} },
+
+  { id:'apatite',    name:'Апатит',       formula:'Ca₅(PO₄)₃F',      hardness:5,   melt:1670, color:'#4488cc', color2:'#224488', cleavage:'несовершенная',              system:'гексагональная',
+    desc:'Входит в состав зубов и костей человека! Эталон твёрдости 5 по Моосу.',
+    heatEffects:{300:'Стабилен. Гексагональная структура устойчива.',600:'Поверхность тускнеет.',900:'Начало разложения фтора и хлора.',1200:'Разложение, образование CaO и P₂O₅.',1670:'Расплавление.'},
+    strikeEffects:{10:'Средней твёрдости — царапает стекло.',35:'Раскалывается по раковистым и ровным поверхностям.',65:'Осколки с характерным стеклянным блеском.',90:'Дробится. Фосфатный порошок — удобрение!'} },
+
+  { id:'olivine',    name:'Оливин',       formula:'(Mg,Fe)₂SiO₄',    hardness:7,   melt:1890, color:'#5a8a20', color2:'#2a4a10', cleavage:'несовершенная',              system:'ромбическая',
+    desc:'Основной минерал мантии Земли. Зелёный цвет, высокая температура плавления.',
+    heatEffects:{500:'Стабилен. Образуется в мантии при огромном давлении.',900:'Окисление железа — цвет темнеет.',1200:'Разложение до пироксенов.',1600:'Начало плавления.',1890:'Расплавление! Это базальтовая магма.'},
+    strikeEffects:{10:'Твёрдый зелёный минерал.',40:'Раскалывается по неровным изогнутым поверхностям.',70:'Оливково-зелёные осколки с жирным блеском.',95:'Разрушается в зелёные зёрна.'} },
+
+  { id:'azurite',    name:'Азурит',       formula:'Cu₃(CO₃)₂(OH)₂',  hardness:3.5, melt:null, color:'#0044aa', color2:'#002266', cleavage:'совершенная',                system:'моноклинная',
+    desc:'Синий «кузен» малахита. Использовался как пигмент с древних времён.',
+    heatEffects:{100:'Начало потемнения — потеря воды.',220:'Разложение: азурит → малахит → тенорит CuO. Синий → зелёный → чёрный!',400:'Полностью чёрный CuO.',700:'При восстановлении — красная медь Cu.',1085:'Медь плавится.'},
+    strikeEffects:{5:'Мягкий, хрупкий. Крошится при лёгком ударе.',20:'Ярко-синий порошок — ультрамарин! Дорогой пигмент.',45:'Осколки с синими блестящими гранями спайности.',70:'Синий порошок. Лазурит художников.'} },
+
+  { id:'cinnabar',   name:'Киноварь',     formula:'HgS',              hardness:2.5, melt:null, color:'#dd1111', color2:'#880000', cleavage:'совершенная',                system:'тригональная',
+    desc:'Ярко-красный минерал. Главная руда ртути. Крайне ядовита!',
+    heatEffects:{200:'Поверхность начинает выделять пары ртути — ОПАСНО!',400:'HgS → Hg + S. Пары ртути конденсируются в жидкие капли!',580:'Полное разложение. Жидкая ртуть стекает.',357:'При охлаждении ртуть затвердевает.',800:'Сера горит синим пламенем, ртуть испаряется.'},
+    strikeEffects:{5:'Мягкая, хрупкая. Крошится легко.',15:'Ярко-алый порошок — пигмент киноварь, использовался тысячи лет!',35:'Красный порошок остаётся на наковальне. Осторожно — ядовито!',60:'Мелкодисперсный красный порошок. Токсичен!'} },
+
+  { id:'turquoise',  name:'Бирюза',       formula:'CuAl₆(PO₄)₄(OH)₈·5H₂O', hardness:5.5, melt:null, color:'#40c0c0', color2:'#208080', cleavage:'отсутствует', system:'триклинная',
+    desc:'Голубовато-зелёный драгоценный камень. Использовалась в украшениях 5000 лет.',
+    heatEffects:{100:'Начало обезвоживания, цвет тускнеет.',200:'Зелёный оттенок из-за разложения медных компонентов.',400:'Полное обезвоживание. Трещины по всей поверхности.',700:'Разложение фосфатной матрицы.',900:'Чёрный оксид меди. Бирюза уничтожена.'},
+    strikeEffects:{10:'Твёрдый, но хрупкий. Небольшие сколы.',35:'Раскалывается с неровным изломом.',60:'Бирюзово-голубые осколки. Красивые срезы с прожилками.',85:'Мелкие осколки. Характерный голубой порошок.'} },
+
+  { id:'rhodonite',  name:'Родонит',      formula:'MnSiO₃',           hardness:5.5, melt:1200, color:'#cc4488', color2:'#882244', cleavage:'совершенная',                system:'триклинная',
+    desc:'Розово-красный минерал с чёрными прожилками марганца. Поделочный камень.',
+    heatEffects:{300:'Цвет бледнеет.',600:'Окисление Mn → MnO₂ — чёрные пятна на поверхности.',900:'Разложение структуры.',1200:'Расплавление в тёмную массу.',1400:'Жидкий расплав, богатый марганцем.'},
+    strikeEffects:{10:'Раскол обнажает розово-красный цвет с чёрными прожилками — красиво!',35:'Ровные плоскости спайности. Розовые грани.',60:'Осколки с характерным розовым цветом и марганцевыми прожилками.',85:'Мелкие розовые осколки.'} },
+
+  { id:'beryl',      name:'Берилл',       formula:'Be₃Al₂Si₆O₁₈',    hardness:7.5, melt:1400, color:'#228B22', color2:'#145214', cleavage:'несовершенная',              system:'гексагональная',
+    desc:'Изумруд — самый ценный берилл. Зелёный цвет от примесей хрома.',
+    heatEffects:{300:'Стабилен. Структура устойчива.',700:'Лёгкое помутнение включений.',1000:'Трещины по включениям — изумруд «вскипает».',1200:'Разрушение структуры.',1400:'Расплавление.'},
+    strikeEffects:{10:'Твёрдый. Царапает стекло.',35:'Раскол по включениям — трещины выявляют природные дефекты.',65:'Зелёные осколки с характерным стеклянным блеском.',90:'Мелкие зелёные осколки. Зелёный цвет — ионы хрома.'} },
+
+  { id:'amazonite',  name:'Амазонит',     formula:'KAlSi₃O₈',         hardness:6,   melt:1200, color:'#5fa8a0', color2:'#2a5850', cleavage:'совершенная',                system:'триклинная',
+    desc:'Зелёный полевой шпат. Назван по реке Амазонке. Поделочный камень.',
+    heatEffects:{300:'Зелёный цвет начинает бледнеть.',600:'Цвет серый — свинец, дающий окраску, переходит в другое состояние.',900:'Перекристаллизация структуры.',1200:'Расплавление в стекло.',1500:'Стекловидный расплав.'},
+    strikeEffects:{10:'По двум системам спайности — прямоугольные сколы.',35:'Зелёно-серые осколки с блестящими гранями спайности.',65:'Характерный ступенчатый излом. Полевой шпат!',90:'Мелкие осколки. Белесые грани спайности.'} },
+
+  { id:'selenite',   name:'Селенит',      formula:'CaSO₄·2H₂O',      hardness:2,   melt:null, color:'#fffff0', color2:'#d0d0c0', cleavage:'совершенная',                system:'моноклинная',
+    desc:'Прозрачная волокнистая разновидность гипса. «Лунный камень» Древнего Рима.',
+    heatEffects:{107:'Потеря воды: становится матовым и непрозрачным.',200:'Полное обезвоживание. Алабастр.',400:'Безводный ангидрит CaSO₄.',900:'Разложение с выделением SO₃.',1200:'Полное разложение.'},
+    strikeEffects:{3:'Чрезвычайно мягкий — царапается ногтем.',10:'Расслаивается на тончайшие прозрачные пластинки.',25:'Стопка прозрачных листов — «Марийское стекло».',50:'Рассыпается в мягкий белый порошок.'} },
+
+  { id:'stibnite',   name:'Антимонит',    formula:'Sb₂S₃',            hardness:2,   melt:550,  color:'#5a5a7a', color2:'#3a3a5a', cleavage:'совершенная',                system:'ромбическая',
+    desc:'Игольчатые металлические кристаллы. Руда сурьмы. Использовался как тушь.',
+    heatEffects:{200:'Кристаллы тускнеют на поверхности.',400:'Разложение: 2Sb₂S₃ + 9O₂ → 2Sb₂O₃ + 6SO₂. Белый оксид.',550:'Расплавление! Низкая точка плавления. Жидкая серебристая масса.',700:'Жидкий металл.',1380:'Кипение сурьмы.'},
+    strikeEffects:{5:'Мягкий, хрупкий. Игольчатые кристаллы ломаются.',15:'Металлические иголки разлетаются.',35:'Серебристый порошок. Пишет как карандаш на бумаге.',60:'Мелкодисперсный серый металлический порошок.'} },
+
+  { id:'lazurite',   name:'Лазурит',      formula:'(NaAlSiO₄)₃·NaS', hardness:5.5, melt:null, color:'#2244bb', color2:'#112288', cleavage:'несовершенная',              system:'кубическая',
+    desc:'Самый синий минерал. Основа пигмента ультрамарин. Ценился дороже золота.',
+    heatEffects:{300:'Цвет стабилен.',500:'Начинается обесцвечивание — синий цвет от S₃⁻ разрушается.',700:'Минерал белеет — синие полисульфидные ионы разрушены.',900:'Полностью белый.',1000:'Начало расплавления.'},
+    strikeEffects:{10:'Средней твёрдости. Неровный скол.',35:'Ярко-синие осколки. Золотые пятна пирита в матрице!',60:'Синий порошок — ультрамарин! Дороже золота в Средневековье.',85:'Ультратонкий синий порошок.'} },
+
+  { id:'serpentine', name:'Серпентин',    formula:'Mg₃Si₂O₅(OH)₄',   hardness:3.5, melt:800,  color:'#3a7a4a', color2:'#1a4a2a', cleavage:'совершенная',                system:'моноклинная',
+    desc:'Зелёный волокнистый минерал. Хризотил-асбест — разновидность серпентина.',
+    heatEffects:{200:'Волокна теряют воду.',400:'Потеря гидроксильных групп. Волокна разрушаются.',600:'Образуется оливин и энстатит — реакция обратная к серпентинизации!',800:'Полное разложение.',1000:'Образование стекла.'},
+    strikeEffects:{10:'Мягкий, волокнистый. Расслаивается на волокна.',25:'Волокнистые пучки расходятся при ударе.',50:'Разрушается на зелёные волокна. Асбестоподобная структура.',75:'Мелкие зелёные чешуйки.'} },
+
+  { id:'kyanite',    name:'Кианит',       formula:'Al₂SiO₅',          hardness:6,   melt:1800, color:'#4477cc', color2:'#224488', cleavage:'совершенная',                system:'триклинная',
+    desc:'Уникален: твёрдость 4.5 вдоль, 7 поперёк кристалла! Голубые лезвия.',
+    heatEffects:{400:'Стабилен. Высокотемпературная керамика!',800:'Начинается превращение в муллит и кристобалит.',1300:'Активное превращение — кристаллы разрушаются.',1600:'Разложение завершено.',1800:'Расплавление.'},
+    strikeEffects:{10:'Вдоль кристалла — мягко царапается ножом (твёрдость 4.5)!',30:'Поперёк кристалла — не царапается! (твёрдость 7). Анизотропия!',60:'Раскол вдоль длинной оси — голубые плоские обломки.',90:'Голубые лезвиеобразные осколки — острые!'} },
+
+  { id:'coppersulf', name:'Халькопирит',  formula:'CuFeS₂',           hardness:3.5, melt:950,  color:'#c0a020', color2:'#806010', cleavage:'несовершенная',              system:'тетрагональная',
+    desc:'Главная медная руда. Золотисто-жёлтый с переливчатой побежалостью.',
+    heatEffects:{200:'Яркая радужная побежалость — синий, фиолетовый, золотой!',400:'Разложение с выделением серы. Запах серы.',600:'Образуется CuS и FeS.',800:'Расплавление медистого штейна.',950:'Жидкая смесь сульфидов меди и железа.'},
+    strikeEffects:{10:'Металлический звук. Вспыхивают искры.',30:'Раскол. Золотистые поверхности с радужной побежалостью.',60:'Яркие переливающиеся грани излома.',85:'Золотой порошок с металлическим блеском.'} },
+];
+
+// ─── SVG ─────────────────────────────────────────────────────────────────────
+function makeSVG(m) {
+  const c=m.color,c2=m.color2;
+  const s={
+    quartz:`<polygon points="26,4 46,14 46,38 26,48 6,38 6,14" fill="${c}" stroke="${c2}" stroke-width="2"/><polygon points="26,4 36,10 26,20 16,10" fill="${c2}" opacity="0.5"/>`,
+    pyrite:`<rect x="8" y="8" width="36" height="36" rx="3" fill="${c}" stroke="${c2}" stroke-width="2"/><rect x="14" y="14" width="12" height="12" fill="${c2}" opacity="0.5"/>`,
+    galena:`<rect x="10" y="10" width="32" height="32" fill="${c}" stroke="${c2}" stroke-width="2"/><rect x="14" y="14" width="24" height="24" fill="${c2}" opacity="0.3"/>`,
+    halite:`<rect x="9" y="9" width="34" height="34" rx="2" fill="${c}" stroke="${c2}" stroke-width="2"/><rect x="9" y="26" width="34" height="2" fill="${c2}" opacity="0.4"/><rect x="26" y="9" width="2" height="34" fill="${c2}" opacity="0.4"/>`,
+    sulfur:`<ellipse cx="26" cy="26" rx="20" ry="16" fill="${c}" stroke="${c2}" stroke-width="2"/><ellipse cx="26" cy="26" rx="12" ry="8" fill="${c2}" opacity="0.4"/>`,
+    malachite:`<path d="M26,6 Q44,12 44,26 Q44,40 26,46 Q8,40 8,26 Q8,12 26,6Z" fill="${c}" stroke="${c2}" stroke-width="2"/><ellipse cx="26" cy="26" rx="8" ry="8" fill="${c2}" opacity="0.3"/>`,
+    fluorite:`<polygon points="26,6 46,26 26,46 6,26" fill="${c}" stroke="${c2}" stroke-width="2"/><polygon points="26,14 38,26 26,38 14,26" fill="${c2}" opacity="0.4"/>`,
+    magnetite:`<circle cx="26" cy="26" r="20" fill="${c}" stroke="${c2}" stroke-width="2"/><circle cx="26" cy="26" r="12" fill="${c2}" opacity="0.5"/>`,
+    calcite:`<polygon points="26,6 42,18 38,38 14,38 10,18" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    diamond:`<polygon points="26,6 46,22 38,46 14,46 6,22" fill="${c}" stroke="${c2}" stroke-width="2"/><polygon points="26,6 38,22 26,30 14,22" fill="${c2}" opacity="0.4"/>`,
+    gold:`<circle cx="26" cy="26" r="20" fill="${c}" stroke="${c2}" stroke-width="2"/><circle cx="20" cy="20" r="7" fill="${c2}" opacity="0.35"/>`,
+    silver:`<circle cx="26" cy="26" r="20" fill="${c}" stroke="${c2}" stroke-width="2"/><circle cx="22" cy="22" r="8" fill="${c2}" opacity="0.3"/>`,
+    hematite:`<circle cx="26" cy="26" r="20" fill="${c}" stroke="${c2}" stroke-width="2"/><path d="M16,20 Q26,14 36,20 Q36,32 26,38 Q16,32 16,20Z" fill="${c2}" opacity="0.4"/>`,
+    obsidian:`<polygon points="26,6 44,20 40,44 12,44 8,20" fill="${c}" stroke="${c2}" stroke-width="2"/><polygon points="26,6 44,20 26,16" fill="${c2}" opacity="0.5"/>`,
+    talc:`<ellipse cx="26" cy="26" rx="20" ry="14" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    gypsum:`<rect x="10" y="16" width="32" height="20" rx="2" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    tourmaline:`<polygon points="26,5 32,10 34,26 32,42 26,47 20,42 18,26 20,10" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    garnet:`<polygon points="26,6 36,10 44,20 44,32 36,42 26,46 16,42 8,32 8,20 16,10" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    topaz:`<polygon points="18,6 34,6 44,20 44,32 34,46 18,46 8,32 8,20" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    corundum:`<polygon points="26,5 38,15 38,37 26,47 14,37 14,15" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    apatite:`<polygon points="26,6 40,14 40,38 26,46 12,38 12,14" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    olivine:`<ellipse cx="26" cy="26" rx="18" ry="20" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    azurite:`<polygon points="26,8 40,18 38,38 14,38 12,18" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    cinnabar:`<polygon points="26,6 42,16 42,36 26,46 10,36 10,16" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    turquoise:`<rect x="8" y="12" width="36" height="28" rx="8" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    rhodonite:`<rect x="10" y="10" width="32" height="32" rx="4" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    beryl:`<polygon points="26,6 38,12 38,40 26,46 14,40 14,12" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    amazonite:`<rect x="10" y="10" width="32" height="32" rx="3" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    selenite:`<rect x="12" y="8" width="28" height="36" rx="1" fill="${c}" stroke="${c2}" stroke-width="2" opacity="0.85"/>`,
+    stibnite:`<rect x="22" y="4" width="8" height="44" rx="4" fill="${c}" stroke="${c2}" stroke-width="2"/><rect x="14" y="10" width="8" height="36" rx="3" fill="${c}" stroke="${c2}" stroke-width="1.5" transform="rotate(-10,18,28)"/>`,
+    lazurite:`<polygon points="26,6 40,16 40,36 26,46 12,36 12,16" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    serpentine:`<path d="M10,20 Q16,10 26,14 Q36,18 40,10 Q44,4 46,14 Q42,24 32,20 Q22,16 18,26 Q14,36 10,32Z" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    kyanite:`<rect x="14" y="6" width="24" height="40" rx="4" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+    coppersulf:`<polygon points="26,6 42,14 44,32 30,46 12,42 8,26 18,10" fill="${c}" stroke="${c2}" stroke-width="2"/>`,
+  };
+  const shape=s[m.id]||`<circle cx="26" cy="26" r="20" fill="${c}" stroke="${c2}" stroke-width="2"/>`;
+  return `<svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">${shape}</svg>`;
+}
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let selected=null, expType='heat', animFrame=null;
+
+// ─── MOBILE TABS ─────────────────────────────────────────────────────────────
+function mobTab(n){
+  document.getElementById('m-tab1').className='mobile-tab'+(n===1?' active':'');
+  document.getElementById('m-tab2').className='mobile-tab'+(n===2?' active':'');
+  document.getElementById('m-page1').className='mobile-page'+(n===1?' active':'');
+  document.getElementById('m-page2').className='mobile-page'+(n===2?' active':'');
+  if(n===2) setTimeout(()=>resizeCanvas('m'),40);
+}
+
+// ─── BUILD GRIDS ─────────────────────────────────────────────────────────────
+function buildGrid(list){
+  const q=getQ();
+  // desktop
+  const dg=document.getElementById('d-grid');
+  dg.innerHTML='';
+  list.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='mineral-card'+(selected&&selected.id===m.id?' selected':'');
+    d.innerHTML=makeSVG(m)+`<div class="name">${m.name}</div><div class="hard">Тв.${m.hardness}</div>`;
+    d.onclick=()=>selectMineral(m,'d');
+    dg.appendChild(d);
+  });
+  // mobile
+  const mg=document.getElementById('m-grid');
+  mg.innerHTML='';
+  list.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='mineral-card'+(selected&&selected.id===m.id?' selected':'');
+    d.innerHTML=makeSVG(m)+`<div class="name">${m.name}</div><div class="hard">Тв.${m.hardness}</div>`;
+    d.onclick=()=>{ selectMineral(m,'m'); mobTab(2); };
+    mg.appendChild(d);
+  });
+  const cnt=list.length;
+  document.getElementById('m-badge').textContent=cnt;
+}
+function getQ(){
+  const ds=document.getElementById('d-search').value.toLowerCase();
+  const ms=document.getElementById('m-search').value.toLowerCase();
+  return ds||ms;
+}
+function filterMinerals(){
+  // sync search boxes
+  const ds=document.getElementById('d-search').value;
+  const ms=document.getElementById('m-search').value;
+  const q=(ds||ms).toLowerCase();
+  document.getElementById('d-search').value=ds||ms;
+  document.getElementById('m-search').value=ds||ms;
+  buildGrid(MINERALS.filter(m=>m.name.toLowerCase().includes(q)||m.formula.toLowerCase().includes(q)));
+}
+buildGrid(MINERALS);
+
+// ─── SELECT MINERAL ──────────────────────────────────────────────────────────
+function selectMineral(m,ctx){
+  selected=m;
+  buildGrid(MINERALS.filter(x=>{
+    const q=getQ();
+    return x.name.toLowerCase().includes(q)||x.formula.toLowerCase().includes(q);
+  }));
+
+  // desktop info
+  document.getElementById('d-info').innerHTML=`
+    ${makeSVG(m)}
+    <div class="minfo">
+      <h2>${m.name}</h2>
+      <div class="props">
+        <span class="prop">${m.formula}</span>
+        <span class="prop">Тв. ${m.hardness}</span>
+        <span class="prop">${m.system}</span>
+        <span class="prop">Спайность: ${m.cleavage}</span>
+        ${m.melt?`<span class="prop">Тпл ${m.melt}°C</span>`:''}
+      </div>
+      <p>${m.desc}</p>
+    </div>`;
+
+  // mobile info
+  document.getElementById('m-info').innerHTML=`
+    ${makeSVG(m)}
+    <div class="minfo">
+      <h2>${m.name}</h2>
+      <div class="props">
+        <span class="prop">${m.formula}</span>
+        <span class="prop">Тв. ${m.hardness}</span>
+        <span class="prop">${m.system}</span>
+        ${m.melt?`<span class="prop">Тпл ${m.melt}°C</span>`:''}
+      </div>
+      <p>${m.desc}</p>
+    </div>`;
+
+  document.getElementById('d-runBtn').disabled=false;
+  document.getElementById('m-runBtn').disabled=false;
+  document.getElementById('d-result').style.display='none';
+  document.getElementById('m-result').style.display='none';
+  const mh=document.getElementById('m-hint');
+  if(mh) mh.style.display='none';
+  clearCanvas('d'); clearCanvas('m');
+}
+
+// ─── EXP TYPE ────────────────────────────────────────────────────────────────
+function selectExp(type){
+  expType=type;
+  ['d','m'].forEach(p=>{
+    document.getElementById(`${p}-btnHeat`).className  ='exp-btn'+(type==='heat'  ?' active':'');
+    document.getElementById(`${p}-btnStrike`).className='exp-btn'+(type==='strike'?' active strike':'');
+    document.getElementById(`${p}-sliderHeat`).style.display  =type==='heat'  ?'':'none';
+    document.getElementById(`${p}-sliderStrike`).style.display=type==='strike'?'':'none';
+  });
+}
+
+// ─── CANVAS ──────────────────────────────────────────────────────────────────
+function resizeCanvas(p){
+  const c=document.getElementById(`${p}-canvas`);
+  const z=c.parentElement;
+  c.width=z.clientWidth; c.height=z.clientHeight;
+}
+window.addEventListener('resize',()=>{ resizeCanvas('d'); resizeCanvas('m'); });
+setTimeout(()=>{ resizeCanvas('d'); resizeCanvas('m'); },100);
+
+function clearCanvas(p){
+  if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
+  const c=document.getElementById(`${p}-canvas`);
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+}
+
+function lerpColor(a,b,t){
+  const ah=a.replace('#',''),bh=b.replace('#','');
+  const parse=h=>[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
+  const [ar,ag,ab]=parse(ah),[br,bg,bb]=parse(bh);
+  return '#'+[ar+(br-ar)*t,ag+(bg-ag)*t,ab+(bb-ab)*t].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+}
+
+function getResultText(m,type,val){
+  const eff=type==='heat'?m.heatEffects:m.strikeEffects;
+  const keys=Object.keys(eff).map(Number).sort((a,b)=>a-b);
+  let txt=eff[keys[0]];
+  for(const k of keys) if(val>=k) txt=eff[k];
+  return txt;
+}
+
+// ─── HEAT ANIMATION ──────────────────────────────────────────────────────────
+function animateHeat(p,temp){
+  resizeCanvas(p);
+  const canvas=document.getElementById(`${p}-canvas`);
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const cx=W/2,cy=H/2-20;
+  const r=Math.min(W,H)*0.16;
+  const ratio=Math.min(temp/3000,1);
+  const particles=[];
+  const maxP=Math.floor(ratio*80);
+  for(let i=0;i<maxP;i++) particles.push({x:cx+(Math.random()-.5)*r*2,y:cy+Math.random()*r,vx:(Math.random()-.5)*1.5,vy:-(Math.random()*2+.5)*(ratio*2+.5),life:Math.random(),maxLife:Math.random()*.7+.3,size:Math.random()*3+1});
+  let t=0;
+  function frame(){
+    ctx.clearRect(0,0,W,H); t++;
+    if(ratio>.1){const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r*3);g.addColorStop(0,`rgba(255,${Math.floor(200*(1-ratio))},0,${Math.min(ratio*.35,.3)})`);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
+    if(ratio>.2){const mg=ctx.createRadialGradient(cx,cy,r*.5,cx,cy,r*1.6);mg.addColorStop(0,`rgba(255,${Math.floor(120*(1-ratio))},0,0.35)`);mg.addColorStop(1,'transparent');ctx.fillStyle=mg;ctx.beginPath();ctx.arc(cx,cy,r*1.6,0,Math.PI*2);ctx.fill();}
+    let bc=selected?selected.color:'#888';
+    if(ratio>.3) bc=lerpColor(bc,ratio>.7?'#ffffff':'#ff8800',ratio*.65);
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=bc;ctx.fill();
+    ctx.strokeStyle=selected?selected.color2:'#555';ctx.lineWidth=2;ctx.stroke();
+    if(temp>400){const ci=Math.min((temp-400)/2000,1);ctx.strokeStyle=`rgba(20,0,0,${ci*.55})`;ctx.lineWidth=1.5;const nc=Math.floor(ci*6);for(let i=0;i<nc;i++){const a=(i/nc)*Math.PI*2+t*.01;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a+.4)*r*.9,cy+Math.sin(a+.4)*r*.9);ctx.stroke();}}
+    for(const p2 of particles){
+      p2.x+=p2.vx+Math.sin(t*.1+p2.life*10)*.3;p2.y+=p2.vy;p2.life-=.012;
+      if(p2.life<=0){p2.x=cx+(Math.random()-.5)*r*2;p2.y=cy+r*.5;p2.vx=(Math.random()-.5)*1.5;p2.vy=-(Math.random()*2+.5)*(ratio*2+.5);p2.life=p2.maxLife;}
+      const al=p2.life/p2.maxLife,fp=1-al;
+      const fc=temp>1200?`rgba(255,255,${Math.floor(200*fp)},${al*.8})`:temp>600?`rgba(255,${Math.floor(180*(1-fp*.7))},0,${al*.8})`:`rgba(255,${Math.floor(120+80*fp)},0,${al*.7})`;
+      ctx.beginPath();ctx.arc(p2.x,p2.y,p2.size*(1-fp*.5),0,Math.PI*2);ctx.fillStyle=fc;ctx.fill();
+    }
+    ctx.fillStyle='#e0e6ef';ctx.font='bold 18px Segoe UI';ctx.textAlign='center';ctx.fillText(`${temp}°C`,cx,cy+r+40);
+    ctx.font='12px Segoe UI';ctx.fillStyle='#5a7a9a';
+    const st=temp<100?'Слабый нагрев':temp<400?'Умеренный нагрев':temp<800?'Сильный нагрев':temp<1500?'Раскалено добела':'Плавление';
+    ctx.fillText(st,cx,cy+r+58);
+    animFrame=requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+// ─── STRIKE ANIMATION ────────────────────────────────────────────────────────
+function animateStrike(p,force){
+  resizeCanvas(p);
+  const canvas=document.getElementById(`${p}-canvas`);
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const cx=W/2,cy=H/2-10;
+  const r=Math.min(W,H)*0.15;
+  const ratio=force/100;
+  const crackAngles=[];const nc=Math.floor(ratio*8)+1;
+  for(let i=0;i<nc;i++) crackAngles.push(Math.random()*Math.PI*2);
+  const fragments=[];const nf=Math.floor(ratio*25)+5;
+  for(let i=0;i<nf;i++){const a=Math.random()*Math.PI*2,sp=(Math.random()*ratio*6+1);fragments.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-ratio*2,size:(Math.random()*ratio*12+2)*(1-ratio*.4),angle:Math.random()*Math.PI*2,spin:(Math.random()-.5)*.2,alpha:1});}
+  const sparks=[];const hard=selected?selected.hardness:5;
+  if(force>20){const ns=Math.floor(ratio*hard*7);for(let i=0;i<ns;i++){const a=-Math.PI/2+(Math.random()-.5)*Math.PI,sp=Math.random()*ratio*8+2;sparks.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,life:1,maxLife:Math.random()*.5+.2});}}
+  let t=0;const IF=8;const frag=ratio>.25;
+  function frame(){
+    ctx.clearRect(0,0,W,H);t++;
+    if(t<IF){const hy=cy-r-50+(50+r)*(t/IF);ctx.fillStyle='#8090a0';ctx.strokeStyle='#5a6a7a';ctx.lineWidth=2;ctx.beginPath();ctx.rect(cx-16,hy-24,32,24);ctx.fill();ctx.stroke();ctx.strokeStyle='#8b4513';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(cx,hy-24);ctx.lineTo(cx+8,hy-70);ctx.stroke();}
+    if(t===IF||t===IF+1){const fl=r*2.2,g=ctx.createRadialGradient(cx,cy,0,cx,cy,fl);g.addColorStop(0,`rgba(255,255,200,${t===IF?.8:.3})`);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,fl,0,Math.PI*2);ctx.fill();}
+    if(t<IF){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=selected?selected.color:'#888';ctx.fill();ctx.strokeStyle=selected?selected.color2:'#555';ctx.lineWidth=2;ctx.stroke();}
+    else if(!frag){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=selected?selected.color:'#888';ctx.fill();ctx.strokeStyle=selected?selected.color2:'#555';ctx.lineWidth=2;ctx.stroke();for(const a of crackAngles){ctx.strokeStyle='rgba(0,0,0,0.6)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);ctx.stroke();}}
+    else if(t>IF){for(const fr of fragments){if(t>IF+2){fr.x+=fr.vx;fr.y+=fr.vy;fr.vy+=.15;fr.angle+=fr.spin;fr.alpha=Math.max(0,fr.alpha-.008);}if(fr.alpha<.05) continue;ctx.save();ctx.translate(fr.x,fr.y);ctx.rotate(fr.angle);ctx.globalAlpha=fr.alpha;ctx.beginPath();const pts=4+Math.floor(Math.random()*3);for(let i=0;i<pts;i++){const a=(i/pts)*Math.PI*2,rr=fr.size*(.7+Math.random()*.6);if(i===0)ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr);else ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}ctx.closePath();ctx.fillStyle=selected?selected.color:'#888';ctx.fill();ctx.strokeStyle=selected?selected.color2:'#555';ctx.lineWidth=1;ctx.stroke();ctx.restore();}}
+    for(const s of sparks){if(t<=IF) continue;s.x+=s.vx;s.y+=s.vy;s.vy+=.2;s.life-=.04;if(s.life<=0) continue;const sa=s.life/s.maxLife;ctx.beginPath();ctx.arc(s.x,s.y,2*sa,0,Math.PI*2);ctx.fillStyle=`rgba(255,220,80,${sa})`;ctx.fill();}
+    if(t>=IF&&t<IF+18){const wr=(t-IF)*4;ctx.beginPath();ctx.arc(cx,cy,wr,0,Math.PI*2);ctx.strokeStyle=`rgba(255,220,150,${1-(t-IF)/18})`;ctx.lineWidth=2;ctx.stroke();}
+    ctx.fillStyle='#e0e6ef';ctx.font='bold 18px Segoe UI';ctx.textAlign='center';ctx.fillText(`${force} Н·м`,cx,cy+r+40);
+    ctx.font='12px Segoe UI';ctx.fillStyle='#5a7a9a';
+    const st=force<15?'Лёгкий удар':force<35?'Умеренный удар':force<65?'Сильный удар':force<85?'Мощный удар':'Разрушительный удар';
+    ctx.fillText(st,cx,cy+r+58);
+    animFrame=requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+// ─── RUN ─────────────────────────────────────────────────────────────────────
+function runExperiment(p){
+  if(!selected) return;
+  clearCanvas(p);
+  const isHeat=expType==='heat';
+  const valEl=isHeat?document.getElementById(`${p}-tempSlider`):document.getElementById(`${p}-forceSlider`);
+  const val=parseInt(valEl.value);
+  const text=getResultText(selected,expType,val);
+  const ov=document.getElementById(`${p}-result`);
+  ov.style.display='block';
+  ov.className='result-overlay '+(isHeat?'result-heat':'result-strike');
+  ov.innerHTML=`<h3>${isHeat?'🔥 Нагрев до '+val+'°C':'🔨 Удар силой '+val+' Н·м'}</h3><p>${text}</p>`;
+  if(isHeat) animateHeat(p,val); else animateStrike(p,val);
+}
+
+// ── Service Worker registration ───────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('[SW] registered, scope:', reg.scope))
+      .catch(err => console.warn('[SW] registration failed:', err));
+  });
+}
+
+// ── Install prompt (A2HS) ────────────────────────────────────────────────
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Show install banner after 3 s if not already installed
+  setTimeout(() => {
+    if (!deferredPrompt) return;
+    const banner = document.createElement('div');
+    banner.id = 'install-banner';
+    banner.style.cssText = `
+      position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+      background:#1a2340;border:1px solid #4a7fa5;border-radius:12px;
+      padding:12px 18px;display:flex;align-items:center;gap:12px;
+      box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:9999;
+      font-family:'Segoe UI',sans-serif;font-size:0.85rem;color:#e0e6ef;
+      max-width:320px;
+    `;
+    banner.innerHTML = `
+      <span style="font-size:1.3rem">⚗️</span>
+      <span>Установить приложение на устройство?</span>
+      <button onclick="installPWA()" style="
+        background:linear-gradient(135deg,#1d4ed8,#7c3aed);border:none;
+        color:white;padding:6px 14px;border-radius:7px;cursor:pointer;
+        font-weight:700;font-size:0.82rem;white-space:nowrap;
+      ">Установить</button>
+      <button onclick="document.getElementById('install-banner').remove()" style="
+        background:none;border:none;color:#6b7fa3;cursor:pointer;font-size:1.1rem;padding:2px 4px;
+      ">✕</button>
+    `;
+    document.body.appendChild(banner);
+  }, 3000);
+});
+
+function installPWA() {
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.remove();
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r => {
+    console.log('[A2HS]', r.outcome);
+    deferredPrompt = null;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.remove();
+});
+</script>
+</body>
+</html>
